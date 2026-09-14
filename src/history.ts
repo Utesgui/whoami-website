@@ -1,4 +1,4 @@
-import { parsePublicIp, type Address, type ProbeResult } from './discovery'
+import { DEVICE_CANDIDATE_SOURCE, parsePublicIp, type Address, type ProbeResult } from './discovery'
 
 export const HISTORY_LIMIT = 30
 export const ADDRESS_LIMIT = 100
@@ -31,7 +31,7 @@ export function createSnapshot(
   results: ProbeResult[],
   options: Pick<ScanSnapshot, 'startedAt' | 'mode' | 'webRtc'> & { stopped: boolean; finishedAt?: string },
 ): ScanSnapshot {
-  const ips = [...new Set(results.filter((r) => r.status === 'success' && r.ip).map((r) => r.ip!))]
+  const ips = [...new Set(results.filter((r) => r.status === 'success' && r.ip && r.source !== DEVICE_CANDIDATE_SOURCE).map((r) => r.ip!))]
   const failures = results.filter((r) => r.status === 'failed').length
   return {
     id: crypto.randomUUID(), startedAt: options.startedAt,

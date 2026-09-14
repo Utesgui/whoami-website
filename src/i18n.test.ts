@@ -119,6 +119,8 @@ describe('canonical sources and diagnostics', () => {
     expect(createI18n('de').formatSource('This server')).toBe('Dieser Server')
     expect(createI18n('de').formatSource('ipify · Dual stack')).toBe('ipify · Dual-Stack')
     expect(createI18n('de').formatSource('Dual stack')).toBe('Dual-Stack')
+    expect(createI18n('de').formatSource('WebRTC · Device candidate')).toBe('WebRTC · Geräte-Kandidat')
+    expect(createI18n('de').formatDiagnostic('Rate limited earlier in this scan. Further requests to this destination were skipped.')).toContain('Weitere Anfragen dorthin wurden übersprungen.')
     for (const source of ['ipify · IPv4', 'icanhazip · IPv6', 'WebRTC · STUN', 'Actual Provider', 'This server hosting']) {
       expect(createI18n('de').formatSource(source)).toBe(source)
     }

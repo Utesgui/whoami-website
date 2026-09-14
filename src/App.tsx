@@ -5,7 +5,7 @@ import {
   Radio, RefreshCw, ScanLine, Settings2, ShieldCheck, SlidersHorizontal, Square, Tag, Wifi, X,
 } from 'lucide-react'
 import {
-  discover, discoverWebRtc, ENDPOINTS, lookupIp,
+  DEEP_ENDPOINTS, DEVICE_CANDIDATE_SOURCE, discover, discoverWebRtc, ENDPOINTS, hasRemoteEvidence, lookupIp,
   type Address, type IpDetails, type ProbeResult,
 } from './discovery'
 import { demoData } from './demo'
@@ -16,6 +16,9 @@ import { useAutoScan, useTheme } from './usePreferences'
 import { featureText, type FeatureKey } from './featureMessages'
 import { HistoryPanel, NameEditor, SettingsPanel, storageErrorText } from './FeaturePanels'
 import { SERVER_API_ENABLED } from './hosting'
+import CoveragePanel from './CoveragePanel'
+import { getCoverage, type ExpectedCounts } from './coverage'
+import { reliabilityText, type ReliabilityKey } from './reliabilityMessages'
 
 const masked = (family: string) => family === 'IPv4' ? '•••.•••.•••.•••' : '••••:••••:••••::••••'
 type ConnectionInfo = { effectiveType?: string; downlink?: number; rtt?: number; saveData?: boolean; addEventListener?: (type: string, listener: () => void) => void; removeEventListener?: (type: string, listener: () => void) => void }
@@ -75,6 +78,7 @@ function AddressRow({ address, index, current, hidden, demo, onCopy, name, onNam
   name: string; onName: (ip: string, name: string) => boolean;
 }) {
   const { language, t, formatTime, formatNumber, formatSource, formatDiagnostic } = useI18n()
+  const candidateOnly = !hasRemoteEvidence(address)
   const [open, setOpen] = useState(false)
   const [details, setDetails] = useState<IpDetails>()
   const [loading, setLoading] = useState(false)
@@ -100,15 +104,16 @@ function AddressRow({ address, index, current, hidden, demo, onCopy, name, onNam
     <div className="address-row">
       <span className={`address-icon ${address.family === 'IPv6' ? 'ipv6-icon' : ''}`}><Globe2 size={21} /></span>
       <div className="address-main">
-        <div className="address-label"><span className={name ? 'custom-name' : ''}>{name || t('address.label', { index: formatNumber(index + 1, { minimumIntegerDigits: 2 }) })}</span><span className={`family-tag ${address.family === 'IPv6' ? 'v6' : ''}`}>{address.family}</span>{!current && <span className="earlier-tag">{t('address.earlier')}</span>}</div>
+        <div className="address-label"><span className={name ? 'custom-name' : ''}>{name || t('address.label', { index: formatNumber(index + 1, { minimumIntegerDigits: 2 }) })}</span><span className={`family-tag ${address.family === 'IPv6' ? 'v6' : ''}`}>{address.family}</span>{candidateOnly ? <span className="earlier-tag">{reliabilityText(language, 'candidateBadge')}</span> : !current && <span className="earlier-tag">{t('address.earlier')}</span>}</div>
         <span className="address-value">{hidden ? masked(address.family) : address.ip}</span>
         <span className="address-sources">{address.sources.map(formatSource).join(' · ')}</span>
       </div>
-      <div className="address-confirmation"><span><span className={`tiny-dot ${current ? 'green' : 'gray'}`} />{t(current ? 'common.observed' : 'address.previouslySeen')}</span><small>{t('address.observations', { count: address.observations })}</small></div>
+      <div className="address-confirmation"><span><span className={`tiny-dot ${current && !candidateOnly ? 'green' : 'gray'}`} />{candidateOnly ? reliabilityText(language, 'candidateBadge') : t(current ? 'common.observed' : 'address.previouslySeen')}</span><small>{t('address.observations', { count: address.observations })}</small></div>
       <button className="icon-button" onClick={() => onCopy(address.ip)} aria-label={t('address.copyNumber', { index: index + 1 })} title={t('address.copy')}><Copy size={17} /></button>
       <button className="icon-button expand-button" onClick={() => setOpen(!open)} aria-label={t(open ? 'address.hideDetails' : 'address.showDetails', { index: index + 1 })} aria-expanded={open} aria-controls={`address-details-${index}`}><ChevronDown size={18} /></button>
     </div>
     {open && <div className="address-details" id={`address-details-${index}`}>
+      {candidateOnly && <p className="candidate-explanation">{reliabilityText(language, 'candidateHint')}</p>}
       <dl className="observation-details"><div><dt>{t('address.firstSeen')}</dt><dd>{formatTime(address.firstSeen)}</dd></div><div><dt>{t('address.lastSeen')}</dt><dd>{formatTime(address.lastSeen)}</dd></div><div><dt>{t('address.evidence')}</dt><dd>{t('address.distinctSources', { count: address.sources.length })}</dd></div></dl>
       <NameEditor ip={address.ip} name={name} language={language} onSave={onName} />
       {details ? <dl className="location-details"><div><dt>{t('address.networkAsn')}</dt><dd>{demo ? t('demo.provider') : metadata(details.provider)} · {demo ? t('demo.asn') : metadata(details.asn)}</dd></div><div><dt>{t('address.location')}</dt><dd>{demo ? t('demo.location') : metadata(details.location)}</dd></div><div><dt>{t('address.timezone')}</dt><dd>{demo ? t('demo.timezone') : metadata(details.timezone)}</dd></div></dl> : <div className="lookup-prompt"><div><strong>{t('address.moreContext')}</strong><p>{t('address.lookupDescription')}</p></div><button className="button small secondary" onClick={lookup} disabled={loading}><LocateFixed size={15} />{t(loading ? 'address.lookingUp' : 'address.lookup')}</button></div>}
@@ -124,6 +129,8 @@ export default function App() {
   const { addresses, history, labels } = notebook
   const { theme, setTheme, error: themeError } = useTheme()
   const f = (key: FeatureKey, values: Record<string, string | number> = {}) => featureText(language, key, values)
+  const r = (key: ReliabilityKey, values: Record<string, string | number> = {}) => reliabilityText(language, key, values)
+  const [expected, setExpected] = useState<ExpectedCounts>({ IPv4: 0, IPv6: 0 })
   const [results, setResults] = useState<ProbeResult[]>([])
   const [running, setRunning] = useState(false)
   const [scanId, setScanId] = useState(-1)
@@ -142,7 +149,7 @@ export default function App() {
   const sequence = useRef(0)
   const environment = useEnvironment()
 
-  const startScan = async (fromDemo = false, automatic = false) => {
+  const startScan = async (fromDemo = false, automatic = false, forceDeep = false) => {
     if (new URLSearchParams(window.location.search).has('demo')) {
       const url = new URL(window.location.href)
       url.searchParams.delete('demo')
@@ -160,10 +167,11 @@ export default function App() {
     setStopped(false)
     setRunning(true)
     const startedAt = new Date().toISOString()
-    const rounds = !automatic && deepScan ? 3 : 1
+    const rounds = !automatic && (deepScan || forceDeep) ? 3 : 1
+    const endpoints = rounds > 1 ? DEEP_ENDPOINTS : ENDPOINTS
     const includeWebRtc = !automatic && webRtc
     const scanResults: ProbeResult[] = []
-    setPlannedChecks(ENDPOINTS.length * rounds)
+    setPlannedChecks(endpoints.length * rounds)
     const receive = (result: ProbeResult) => {
       if (controller.signal.aborted || sequence.current !== id) return
       scanResults.push(result)
@@ -171,8 +179,8 @@ export default function App() {
       notebook.recordResult(result, id)
     }
     await Promise.all([
-      discover(controller.signal, rounds, receive),
-      includeWebRtc ? discoverWebRtc(controller.signal, receive) : Promise.resolve(),
+      discover(controller.signal, rounds, receive, fetch, endpoints),
+      includeWebRtc ? discoverWebRtc(controller.signal, receive, rounds) : Promise.resolve(),
     ])
     if (sequence.current === id) {
       setRunning(false)
@@ -254,7 +262,8 @@ export default function App() {
     const report = {
       generatedAt: new Date().toISOString(), demo,
       note: 'Observed public addresses, not a count of physical connections. May include earlier scans in this tab.',
-      addresses, labels, history, latestScan: { stopped, completedAt: finishedAt || null, results }, environment,
+      addresses, labels, history, expectedCounts: expected, coverage: getCoverage(addresses, scanId, expected),
+      latestScan: { stopped, completedAt: finishedAt || null, results }, environment,
     }
     const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }))
     const link = document.createElement('a')
@@ -265,15 +274,17 @@ export default function App() {
     setFeatureToast(null)
     setToast('toast.exported')
   }
-  const current = addresses.filter((address) => address.scanId === scanId)
+  const current = addresses.filter((address) => address.scanId === scanId && hasRemoteEvidence(address))
   const primary = current.find((address) => address.family === 'IPv4') ?? current[0]
   const v4Count = addresses.filter((address) => address.family === 'IPv4').length
   const v6Count = addresses.filter((address) => address.family === 'IPv6').length
-  const successes = results.filter((result) => result.status === 'success')
+  const successes = results.filter((result) => result.status === 'success' && result.source !== DEVICE_CANDIDATE_SOURCE)
+  const deviceCandidates = results.filter((result) => result.status === 'success' && result.source === DEVICE_CANDIDATE_SOURCE)
   const httpResults = results.filter((result) => !result.id.startsWith('webrtc'))
   const unavailable = results.filter((result) => result.status === 'failed').length
   const visibleAddresses = addresses.filter((address) => filter === 'all' || address.family === filter)
-  const scanLabel = t(running ? 'scan.running' : stopped ? 'scan.stopped' : demo ? 'scan.example' : successes.length ? 'scan.complete' : 'scan.noPublicIp')
+  const scanLabel = !running && !stopped && !demo && !successes.length && deviceCandidates.length ? r('scanOnlyCandidates')
+    : t(running ? 'scan.running' : stopped ? 'scan.stopped' : demo ? 'scan.example' : successes.length ? 'scan.complete' : 'scan.noPublicIp')
 
   return <>
     <a className="skip-link" href="#main">{t('nav.skip')}</a>
@@ -301,14 +312,14 @@ export default function App() {
           <div className="primary-address">
             <div className="primary-label"><h2 id="primary-heading">{primary ? t('connection.observedPublic', { family: primary.family }) : t('connection.publicIp')}</h2><button className="icon-button hide-button" aria-label={t(hidden ? 'connection.showIps' : 'connection.hideIps')} title={t(hidden ? 'connection.showIps' : 'connection.hideIps')} onClick={() => setHidden(!hidden)}>{hidden ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
             <div className={`primary-ip ${primary?.family === 'IPv6' ? 'primary-v6' : ''} ${!primary ? 'ip-placeholder' : ''}`}>{primary ? hidden ? masked(primary.family) : primary.ip : t(running ? 'connection.lookingUp' : 'connection.notYetObserved')}{primary && <button className="icon-button primary-copy" onClick={() => void copy(primary.ip)} aria-label={t('connection.copyPrimary')}><Copy size={21} /></button>}</div>
-            <p className="primary-caption">{primary ? <><span className="tiny-dot green" />{t(demo ? 'demo.address' : 'connection.seenThisScan')}<span className="caption-divider" />{t('connection.confirmed', { count: primary.sources.length })}</> : t(running ? 'connection.checkingDestinations' : 'connection.tryAgain')}</p>
+            <p className="primary-caption">{primary ? <><span className="tiny-dot green" />{t(demo ? 'demo.address' : 'connection.seenThisScan')}<span className="caption-divider" />{r('gathered', { count: primary.sources.length })}</> : t(running ? 'connection.checkingDestinations' : 'connection.tryAgain')}</p>
             {primary && labels[primary.ip] && <p className="named-primary"><Tag size={13} /><span>{f('assignedName')}: {labels[primary.ip]}</span></p>}
             <div className="scan-actions"><button className="button primary" onClick={() => running ? stopScan() : void startScan(demo)}>{running ? <Square size={15} /> : <ScanLine size={18} />}{t(running ? 'scan.stop' : demo ? 'scan.checkConnection' : 'scan.again')}</button><button className={`button quiet options-button ${optionsOpen ? 'selected' : ''}`} onClick={() => setOptionsOpen(!optionsOpen)} aria-expanded={optionsOpen} aria-controls="scan-options"><SlidersHorizontal size={16} />{t('scan.options')}<ChevronDown size={14} /></button></div>
           </div>
           <RouteDiagram addresses={current} running={running} />
         </div>
         {optionsOpen && <div className="scan-options" id="scan-options">
-          <label className="option"><input type="checkbox" checked={deepScan} onChange={(event) => setDeepScan(event.target.checked)} disabled={running} /><span><strong>{t('scan.deeper')}</strong><small>{t('scan.deeperDescription', { count: ENDPOINTS.length })}</small></span></label>
+          <label className="option"><input type="checkbox" checked={deepScan} onChange={(event) => setDeepScan(event.target.checked)} disabled={running} /><span><strong>{t('scan.deeper')}</strong><small>{t('scan.deeperDescription', { count: DEEP_ENDPOINTS.length })}</small><small>{r('providerHint', { providers: 'ident.me, ip4.me (ip4only.me / ip6only.me)' })}</small></span></label>
           <label className="option"><input type="checkbox" checked={webRtc} onChange={(event) => setWebRtc(event.target.checked)} disabled={running} /><span><strong>{t('scan.includeWebRtc')} <span className="optional-tag">{t('scan.optional')}</span></strong><small>{t('scan.webRtcDescription')}</small></span></label>
           <p>{t('scan.optionsHint')}</p>
         </div>}
@@ -319,6 +330,8 @@ export default function App() {
           <div className="checked-time"><RefreshCw size={14} className={running ? 'spin' : ''} /><span>{running ? t('scan.httpChecks', { completed: httpResults.length, planned: plannedChecks }) : finishedAt ? t('scan.checked', { time: formatTime(finishedAt) }) : t('scan.ready')}</span>{autoScan > 0 && <span className="auto-indicator"><Radio size={12} />{f('autoActive')}</span>}</div>
         </div>
       </section>
+
+      <CoveragePanel addresses={addresses} scanId={scanId} expected={expected} setExpected={setExpected} language={language} running={running} demo={demo} scan={() => { setDeepScan(true); void startScan(demo, false, true) }} />
 
       <div className="content-grid">
         <section className="addresses-section" aria-labelledby="addresses-heading">
@@ -351,7 +364,7 @@ export default function App() {
       <section className="diagnostics-section" id="diagnostics">
         <details>
           <summary><span className="diagnostics-title"><span className="diagnostics-icon"><CheckCheck size={20} /></span><span><strong>{t('diagnostics.heading')}</strong><small>{results.length ? `${t('diagnostics.successes', { count: successes.length })}${unavailable ? ` · ${t('diagnostics.unavailable', { count: unavailable })}` : ''}` : t('diagnostics.subtitle')}</small></span></span><span className="diagnostics-action">{t('diagnostics.view')} <ChevronDown size={17} /></span></summary>
-          <div className="diagnostics-content"><p>{t('diagnostics.explanation')}</p>{results.length ? <div className="table-scroll"><table><thead><tr><th>{t('diagnostics.destination')}</th><th>{t('diagnostics.round')}</th><th>{t('diagnostics.result')}</th><th>{t('diagnostics.time')}</th></tr></thead><tbody>{results.map((result, index) => <tr key={`${result.id}-${index}`}><td>{formatSource(result.source)}</td><td>{formatNumber(result.round)}</td><td><span className={`result-status ${result.status}`}>{result.status === 'success' ? hidden ? masked(result.family ?? 'IPv4') : result.ip : t(result.status === 'skipped' ? 'common.notExposed' : 'common.unavailable')}</span>{result.message && <small>{formatDiagnostic(result.message)}</small>}</td><td>{t('diagnostics.duration', { duration: result.duration })}</td></tr>)}</tbody></table></div> : <p>{t('diagnostics.empty')}</p>}</div>
+          <div className="diagnostics-content"><p>{t('diagnostics.explanation')}</p><p>{r('hostHistory')}</p>{results.length ? <div className="table-scroll"><table><thead><tr><th>{t('diagnostics.destination')}</th><th>{t('diagnostics.round')}</th><th>{t('diagnostics.result')}</th><th>{t('diagnostics.time')}</th></tr></thead><tbody>{results.map((result, index) => <tr key={`${result.id}-${index}`}><td>{formatSource(result.source)}</td><td>{formatNumber(result.round)}</td><td><span className={`result-status ${result.source === DEVICE_CANDIDATE_SOURCE ? 'skipped' : result.status}`}>{result.status === 'success' ? hidden ? masked(result.family ?? 'IPv4') : result.ip : t(result.status === 'skipped' ? 'common.notExposed' : 'common.unavailable')}</span>{result.source === DEVICE_CANDIDATE_SOURCE && <small>{r('candidateCaption')}</small>}{result.message && <small>{formatDiagnostic(result.message)}</small>}</td><td>{t('diagnostics.duration', { duration: result.duration })}</td></tr>)}</tbody></table></div> : <p>{t('diagnostics.empty')}</p>}</div>
         </details>
       </section>
 
@@ -361,7 +374,7 @@ export default function App() {
           <details><summary>{t('faq.discoveryQuestion')}<ChevronDown size={18} /></summary><p>{t(SERVER_API_ENABLED ? 'faq.discoveryAnswer' : 'faq.discoveryStatic')}</p></details>
           <details><summary>{t('faq.linesQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.linesAnswer')}</p><p>{t('faq.linesTip')}</p></details>
           <details><summary>{t('faq.detailsQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.detailsAnswer')}</p></details>
-          <details id="privacy"><summary>{t('faq.privacyQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.privacyAnswer')}</p><p>{t('faq.privacyDetails')}</p><p>{f('privacyLocal')}</p></details>
+          <details id="privacy"><summary>{t('faq.privacyQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.privacyAnswer')}</p><p>{t('faq.privacyDetails')}</p><p>{r('extraPrivacy')}</p><p>{f('privacyLocal')}</p></details>
         </div>
       </section>
     </main>

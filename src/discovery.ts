@@ -2,7 +2,7 @@ import ipaddr from 'ipaddr.js'
 import { SERVER_API_ENABLED } from './hosting'
 
 export type Family = 'IPv4' | 'IPv6'
-export type Endpoint = { id: string; name: string; url: string; format: 'json' | 'text'; family?: Family }
+export type Endpoint = { id: string; name: string; url: string; format: 'json' | 'text' | 'ip4me'; family?: Family }
 export type ProbeResult = {
   id: string
   source: string
@@ -13,6 +13,7 @@ export type ProbeResult = {
   duration: number
   at: string
   message?: string
+  httpStatus?: number
 }
 export type Address = {
   ip: string
@@ -32,6 +33,27 @@ export const ENDPOINTS: Endpoint[] = [
   { id: 'icanhaz4', name: 'icanhazip · IPv4', url: 'https://ipv4.icanhazip.com', format: 'text', family: 'IPv4' },
   { id: 'icanhaz6', name: 'icanhazip · IPv6', url: 'https://ipv6.icanhazip.com', format: 'text', family: 'IPv6' },
 ]
+
+export const DEEP_ENDPOINTS: Endpoint[] = [
+  ...ENDPOINTS,
+  { id: 'ident4', name: 'ident.me · IPv4', url: 'https://v4.ident.me/', format: 'text', family: 'IPv4' },
+  { id: 'ident6', name: 'ident.me · IPv6', url: 'https://v6.ident.me/', format: 'text', family: 'IPv6' },
+  { id: 'ip4me', name: 'ip4.me · IPv4', url: 'https://ip4only.me/api/', format: 'ip4me', family: 'IPv4' },
+  { id: 'ip6me', name: 'ip4.me · IPv6', url: 'https://ip6only.me/api/', format: 'ip4me', family: 'IPv6' },
+]
+
+export const DEVICE_CANDIDATE_SOURCE = 'WebRTC · Device candidate'
+export function hasRemoteEvidence(address: Address): boolean {
+  return address.sources.some((source) => source !== DEVICE_CANDIDATE_SOURCE)
+}
+
+export function parseIceCandidate(candidate: Pick<RTCIceCandidate, 'type' | 'address' | 'candidate'>) {
+  const parts = (candidate.candidate ?? '').trim().split(/\s+/)
+  const type = candidate.type ?? parts[parts.indexOf('typ') + 1]
+  if (type !== 'srflx' && type !== 'host') return null
+  const parsed = parsePublicIp(candidate.address ?? parts[4])
+  return parsed ? { ...parsed, kind: type } : null
+}
 
 export function parsePublicIp(value: unknown): { ip: string; family: Family } | null {
   if (typeof value !== 'string') return null
@@ -53,7 +75,8 @@ export function mergeObservation(addresses: Address[], result: ProbeResult, scan
   if (!previous) {
     return [...addresses, {
       ip: result.ip, family: result.family, sources: [result.source],
-      firstSeen: result.at, lastSeen: result.at, observations: 1, scanId,
+      firstSeen: result.at, lastSeen: result.at, observations: 1,
+      scanId: result.source === DEVICE_CANDIDATE_SOURCE ? -1 : scanId,
     }]
   }
   return addresses.map((address) => address.ip !== result.ip ? address : {
@@ -61,7 +84,7 @@ export function mergeObservation(addresses: Address[], result: ProbeResult, scan
     sources: [...new Set([...address.sources, result.source])],
     lastSeen: result.at,
     observations: address.observations + 1,
-    scanId,
+    scanId: result.source === DEVICE_CANDIDATE_SOURCE ? address.scanId : scanId,
   })
 }
 
@@ -87,9 +110,15 @@ export async function probeEndpoint(
     const response = await fetcher(`${endpoint.url}${separator}check=${crypto.randomUUID()}`, {
       signal: controller.signal, cache: 'no-store', credentials: 'omit', referrerPolicy: 'no-referrer',
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    if (!response.ok) return { ...base(), status: 'failed', httpStatus: response.status, message: `HTTP ${response.status}` }
     const data: unknown = endpoint.format === 'json' ? await response.json() : await response.text()
-    const value = endpoint.format === 'json' && data && typeof data === 'object' && 'ip' in data ? data.ip : data
+    let value = endpoint.format === 'json' && data && typeof data === 'object' && 'ip' in data ? data.ip : data
+    if (endpoint.format === 'ip4me') {
+      const fields = typeof data === 'string' ? data.trim().split(',') : []
+      if (fields.length !== 6 || fields[0] !== endpoint.family) throw new Error('The service did not return a valid public IP.')
+      // Field 2 is the remote address. Forwarded-header fields are not authoritative.
+      value = fields[1]
+    }
     const parsed = parsePublicIp(value)
     if (!parsed) {
       if (endpoint.id === 'origin' && data && typeof data === 'object' && 'public' in data && data.public === false) {
@@ -127,33 +156,49 @@ export async function discover(
   rounds: number,
   onResult: (result: ProbeResult) => void,
   fetcher: typeof fetch = fetch,
+  endpoints: readonly Endpoint[] = ENDPOINTS,
 ) {
+  const rateLimited = new Set<string>()
   for (let round = 1; round <= rounds && !signal.aborted; round++) {
-    await Promise.all(ENDPOINTS.map(async (endpoint) => {
+    await Promise.all(endpoints.map(async (endpoint, index) => {
+      if (rounds > 1) await pause(index * 175, signal)
+      if (signal.aborted) return
+      if (rateLimited.has(endpoint.id)) {
+        onResult({
+          id: `${endpoint.id}-${round}`, source: endpoint.name, round, status: 'skipped', duration: 0,
+          at: new Date().toISOString(), message: 'Rate limited earlier in this scan. Further requests to this destination were skipped.',
+        })
+        return
+      }
       const result = await probeEndpoint(endpoint, round, signal, fetcher)
+      if (result.httpStatus === 429) rateLimited.add(endpoint.id)
       if (!signal.aborted) onResult(result)
     }))
-    if (round < rounds) await pause(700, signal)
+    if (round < rounds) await pause(2000, signal)
   }
 }
 
-export async function discoverWebRtc(signal: AbortSignal, onResult: (result: ProbeResult) => void) {
+export const STUN_TARGETS = [
+  { name: 'Google', url: 'stun:stun.l.google.com:19302' },
+  { name: 'Cloudflare', url: 'stun:stun.cloudflare.com:3478' },
+] as const
+
+async function gatherIce(
+  target: typeof STUN_TARGETS[number], round: number,
+  signal: AbortSignal, onResult: (result: ProbeResult) => void,
+) {
   const started = performance.now()
   const base = () => ({
-    id: 'webrtc', source: 'WebRTC · STUN', round: 1,
+    id: `webrtc-${target.name}-${round}`, source: `WebRTC · ${target.name} STUN`, round,
     at: new Date().toISOString(), duration: Math.round(performance.now() - started),
   })
   if (signal.aborted) return
-  if (typeof RTCPeerConnection === 'undefined') {
-    onResult({ ...base(), status: 'failed', message: 'WebRTC is not supported in this browser.' })
-    return
-  }
   let peer: RTCPeerConnection | undefined
-  let found = false
+  let remoteFound = false
+  const seen = new Set<string>()
   try {
-    peer = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }],
-    })
+    // Separate ICE sessions prevent one STUN destination from suppressing the other's candidates.
+    peer = new RTCPeerConnection({ iceServers: [{ urls: target.url }] })
     const connection = peer
     connection.createDataChannel('address-check')
     await new Promise<void>((resolve, reject) => {
@@ -167,18 +212,22 @@ export async function discoverWebRtc(signal: AbortSignal, onResult: (result: Pro
       signal.addEventListener('abort', finish, { once: true })
       connection.onicecandidate = (event) => {
         if (!event.candidate) { finish(); return }
-        if (event.candidate.type !== 'srflx') return
-        const parsed = parsePublicIp(event.candidate.address)
-        if (parsed && !signal.aborted) {
-          found = true
-          onResult({ ...base(), id: `webrtc-${parsed.ip}`, status: 'success', ...parsed })
+        const parsed = parseIceCandidate(event.candidate)
+        if (parsed && !signal.aborted && !seen.has(`${parsed.kind}-${parsed.ip}`)) {
+          seen.add(`${parsed.kind}-${parsed.ip}`)
+          if (parsed.kind === 'srflx') remoteFound = true
+          onResult({
+            ...base(), id: `webrtc-${target.name}-${round}-${parsed.kind}-${parsed.ip}`, status: 'success',
+            ip: parsed.ip, family: parsed.family,
+            ...(parsed.kind === 'host' ? { source: DEVICE_CANDIDATE_SOURCE } : {}),
+          })
         }
       }
       Promise.resolve().then(() => connection.createOffer()).then((offer) => {
         if (!signal.aborted && connection.signalingState !== 'closed') return connection.setLocalDescription(offer)
       }).catch((error: unknown) => { cleanup(); reject(error) })
     })
-    if (!found && !signal.aborted) onResult({
+    if (!remoteFound && !signal.aborted) onResult({
       ...base(), status: 'skipped',
       message: 'No public STUN candidate was exposed. Browser privacy settings, UDP filtering, or routing may limit this check.',
     })
@@ -186,6 +235,21 @@ export async function discoverWebRtc(signal: AbortSignal, onResult: (result: Pro
     if (!signal.aborted) onResult({ ...base(), status: 'failed', message: error instanceof Error ? error.message : 'WebRTC check failed.' })
   } finally {
     peer?.close()
+  }
+}
+
+export async function discoverWebRtc(signal: AbortSignal, onResult: (result: ProbeResult) => void, rounds = 1) {
+  if (signal.aborted) return
+  if (typeof RTCPeerConnection === 'undefined') {
+    onResult({
+      id: 'webrtc', source: 'WebRTC · STUN', round: 1, at: new Date().toISOString(), duration: 0,
+      status: 'failed', message: 'WebRTC is not supported in this browser.',
+    })
+    return
+  }
+  for (let round = 1; round <= rounds && !signal.aborted; round++) {
+    await Promise.all(STUN_TARGETS.map((target) => gatherIce(target, round, signal, onResult)))
+    if (round < rounds) await pause(2000, signal)
   }
 }
 

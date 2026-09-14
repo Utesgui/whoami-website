@@ -30,13 +30,13 @@ npm run preview:pages
 
 The Pages build uses `/whoami-website/` as its asset base. To use another repository name, pass `-- --base=/your-repository/` to `build:pages` and adapt the Pages preview/test base paths. The workflow derives the deployed asset prefix from the repository name.
 
-GitHub Pages cannot run Node.js, so this edition checks **five public destinations** (15 checks in a deeper scan) and has no `/api/whoami` endpoint. IPv4/IPv6 discovery, optional WebRTC, location lookups, names, history, themes, translations, and export still work. The ordinary `npm run build` / `npm start` deployment retains the server API and sixth destination. GitHub Pages itself can log normal website request metadata under GitHub's privacy policies.
+GitHub Pages cannot run Node.js, so this edition checks **five public destinations** normally and **nine in a deeper scan** (27 HTTP results across three rounds), and has no `/api/whoami` endpoint. IPv4/IPv6 discovery, optional WebRTC, location lookups, names, history, themes, translations, and export still work. The ordinary `npm run build` / `npm start` deployment retains the server API as an additional destination (six quick / ten deep). GitHub Pages itself can log normal website request metadata under GitHub's privacy policies.
 
 ## What it can discover
 
 - IPv4 and IPv6 addresses observed by this server, ipify, and icanhazip, including distinct addresses exposed to different destinations.
-- Deeper discovery: three rounds against five public HTTP destinations, plus the site's IP API when running with a backend, with cache-busting, timeouts, independent failures, and cancellation.
-- Optional WebRTC/STUN discovery of public server-reflexive candidates. **Off by default**: it can expose an IP outside a VPN or proxy. It contacts Google and Cloudflare STUN servers without camera or microphone permission.
+- Deeper discovery: three paced rounds against nine public HTTP destinations in multiple destination networks, plus the site's IP API when running with a backend. Requests are staggered, with two seconds between rounds, cache-busting, timeouts, independent failures, and cancellation. HTTP 429 stops further requests to that endpoint for the remainder of the scan. Rough upper bound: 35 seconds.
+- Optional WebRTC/STUN discovery with separate Google/Cloudflare ICE sessions, repeated in deep mode. **Off by default**: it can expose an IP outside a VPN or proxy. No camera or microphone permission is requested. Public server-reflexive addresses are remote observations; global host addresses are shown as **device candidates**, not remote confirmations. Private, link-local, mDNS, documentation and TURN-relay addresses are excluded.
 - Per-address source evidence, first/last-seen times, and optional provider, ASN, and approximate location from ipapi.co.
 - Browser-reported online status, secure context, language, timezone, and effective connection estimate when supported.
 - Per-request diagnostics, address masking, copy, IPv4/IPv6 filters, and downloadable JSON reports.
@@ -60,9 +60,21 @@ The demo is isolated from live observations and saved data. Returning to live re
 
 A failed IPv6 check means “not observed,” not “unsupported.” HTTP durations include service and connection overhead and are **not ping, bandwidth, or speed-test results**. IP geolocation is approximate; the browser timezone is a separate device setting.
 
+## Finding all addresses on a multi-WAN setup
+
+Open **Looking for all your addresses?**, choose the expected IPv4 and IPv6 counts (there is a **3 IPv4 + 3 IPv6** preset), then **Run multi-WAN scan**. This enables deeper discovery without silently enabling WebRTC. The coverage panel distinguishes this scan from all collected observations and shows which expected counts remain missing. Expectations are tab-only and included in JSON exports.
+
+Deep mode adds `v4.ident.me` and `v6.ident.me` ([API documentation](https://api.ident.me/)), plus `ip4only.me/api/` and `ip6only.me/api/` ([API documentation](https://ip4only.me/docs/)). These add destination-network diversity beyond ipify and icanhazip. For the CSV API only field 2, the remote address, is used; forwarded-header fields are not trusted. Quick and automatic scans never contact the extra providers. Providers may change routing or rate-limit; they are not availability guarantees.
+
+**Reaching 3 + 3 is a count, not proof of three lines.** A router's WAN IPv6, device global IPv6 addresses, temporary privacy addresses and delegated prefixes are not interchangeable. Device-only WebRTC candidates are listed for completeness but excluded from remote-observed coverage and history address comparisons. An address remotely confirmed in an earlier scan is not counted as remotely confirmed now merely because it reappears as a device candidate.
+
+If an address remains missing, use the router's WAN status as the authoritative inventory. For external verification, explicitly route **only the testing device** through each WAN in turn and scan in the same tab. Do not disable a shared WAN just for this test. If multiple adapters connect directly to the computer, use OS routing or a local interface-bound tool. A static website cannot enumerate all NICs, bypass source-address selection, force a fresh TCP connection, or activate an idle failover WAN. Query-string cache-busting and fresh ICE sessions improve sampling but do not override these limits.
+
 ## Privacy and external services
 
 Loading the live page contacts this server, `api.ipify.org`, `api6.ipify.org`, `api64.ipify.org`, `ipv4.icanhazip.com`, and `ipv6.icanhazip.com`. Those services receive the source IP and normal request metadata. Requests omit credentials and referrers. Only explicitly choosing “Look up details” sends the selected IP to `ipapi.co`. Only enabling WebRTC for a scan contacts Google and Cloudflare STUN.
+
+Explicit deep scans additionally contact ident.me and ip4.me through the four endpoints above. They receive the source IP and normal request metadata and have their own retention policies. See [ident.me's policy](https://api.ident.me/) and [ip4.me's legal notice](https://ip4only.me/legal.txt). Device candidates exposed by optional WebRTC may include global IPv6 addresses that ordinary HTTP requests do not use.
 
 There are no accounts, analytics, external fonts, or cookies. Language and appearance preferences use local browser storage. **IP observations, names, and history are not persisted unless you explicitly opt in.** Saved connection data stays in this browser, is not cloud-synced, and can be accessed by others using this browser profile. New data replaces old entries at the stated retention limits. Clearing site data in browser settings is an alternative if in-app removal is blocked. This server does not log requests; external providers and your hosting infrastructure may have their own logging/retention policies. Reports contain IP addresses and manual names. The hide control masks all on-screen IP text, including history, but not copied or exported data.
 

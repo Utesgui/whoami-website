@@ -4,7 +4,7 @@ import {
   emptyConnectionData, HISTORY_LIMIT, loadConnectionData, removeConnectionData, saveConnectionData,
   updateLabel, type StoragePort,
 } from './history'
-import { mergeObservation, type ProbeResult } from './discovery'
+import { DEVICE_CANDIDATE_SOURCE, mergeObservation, type ProbeResult } from './discovery'
 
 const result: ProbeResult = {
   id: 'source-1', source: 'ipify · IPv4', round: 1, status: 'success', ip: '8.8.8.8',
@@ -29,6 +29,11 @@ describe('bounded scan history', () => {
     expect(scan).toMatchObject({ ips: ['8.8.8.8'], status: 'partial', checks: 3, failures: 1, mode: 'automatic', webRtc: false })
     expect(createSnapshot([], options).status).toBe('failed')
     expect(createSnapshot([result], { ...options, stopped: true }).status).toBe('stopped')
+  })
+  it('excludes device-only ICE candidates from remote-observed snapshot comparisons', () => {
+    const candidate = { ...result, source: DEVICE_CANDIDATE_SOURCE }
+    expect(createSnapshot([candidate], options)).toMatchObject({ status: 'failed', ips: [], checks: 1 })
+    expect(createSnapshot([candidate, result], options).ips).toEqual(['8.8.8.8'])
   })
   it('keeps newest thirty scans and replaces duplicate IDs', () => {
     const snapshot = first()

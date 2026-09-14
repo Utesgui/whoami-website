@@ -2,11 +2,11 @@ import { test, expect, type Page } from '@playwright/test'
 import { readFile } from 'node:fs/promises'
 
 async function mockChecks(page: Page, getIpv4 = () => '8.8.8.8') {
-  await page.route(/https:\/\/(api(6|64)?\.ipify\.org|ipv[46]\.icanhazip\.com)/, async (route) => {
+  await page.route(/https:\/\/(api(6|64)?\.ipify\.org|ipv[46]\.icanhazip\.com|v[46]\.ident\.me|ip[46]only\.me)/, async (route) => {
     const url = route.request().url()
-    const ip = url.includes('api6.') || url.includes('ipv6.') ? '2606:4700:4700::1111'
+    const ip = url.includes('api6.') || url.includes('ipv6.') || url.includes('v6.ident') || url.includes('ip6only') ? '2606:4700:4700::1111'
       : url.includes('api64.') ? '1.1.1.1' : getIpv4()
-    await route.fulfill({ contentType: url.includes('ipify') ? 'application/json' : 'text/plain', body: url.includes('ipify') ? JSON.stringify({ ip }) : `${ip}\n` })
+    await route.fulfill({ contentType: url.includes('ipify') ? 'application/json' : 'text/plain', body: url.includes('ipify') ? JSON.stringify({ ip }) : url.includes('only.me') ? `${ip.includes(':') ? 'IPv6' : 'IPv4'},${ip},1,,,` : `${ip}\n` })
   })
 }
 
@@ -31,7 +31,7 @@ test('discovers distinct public addresses, filters families, and keeps earlier o
   await expect(page.locator('.address-value').first()).toContainText('•••')
 })
 
-test('deeper scanning sends eighteen HTTP checks and metadata is opt-in', async ({ page }) => {
+test('deeper scanning sends thirty diversified HTTP checks and metadata is opt-in', async ({ page }) => {
   await mockChecks(page)
   let lookups = 0
   await page.route('https://ipapi.co/**', async (route) => {
@@ -45,9 +45,9 @@ test('deeper scanning sends eighteen HTTP checks and metadata is opt-in', async 
   await expect(page.getByRole('checkbox', { name: /Include WebRTC/ })).not.toBeChecked()
   await page.getByRole('checkbox', { name: /Deeper discovery/ }).check()
   await page.getByRole('button', { name: 'Scan again', exact: true }).click()
-  await expect(page.getByText('Scan complete', { exact: true })).toBeVisible()
+  await expect(page.getByText('Scan complete', { exact: true })).toBeVisible({ timeout: 35000 })
   await page.locator('#diagnostics summary').click()
-  await expect(page.locator('tbody tr')).toHaveCount(18)
+  await expect(page.locator('tbody tr')).toHaveCount(30)
   const firstIp = page.locator('.address-entry').filter({ has: page.locator('.address-value', { hasText: '8.8.8.8' }) })
   await firstIp.getByRole('button', { name: /Show details/ }).click()
   await firstIp.getByRole('button', { name: 'Look up details' }).click()

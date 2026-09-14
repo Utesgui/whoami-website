@@ -11,7 +11,7 @@ const CSP = [
   "style-src 'self'",
   "font-src 'self'",
   "img-src 'self' data:",
-  "connect-src 'self' https://api.ipify.org https://api6.ipify.org https://api64.ipify.org https://icanhazip.com https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://ipapi.co",
+  "connect-src 'self' https://api.ipify.org https://api6.ipify.org https://api64.ipify.org https://icanhazip.com https://ipv4.icanhazip.com https://ipv6.icanhazip.com https://v4.ident.me https://v6.ident.me https://ip4only.me https://ip6only.me https://ipapi.co",
   "base-uri 'none'",
   "object-src 'none'",
   "frame-ancestors 'none'",

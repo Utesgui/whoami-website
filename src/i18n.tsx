@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { reliabilityText } from './reliabilityMessages'
 
 export type Language = 'en' | 'de'
 export type Interpolation = Readonly<Record<string, string | number>>
@@ -69,7 +70,7 @@ export const en = {
   'scan.again': 'Scan again',
   'scan.options': 'Scan options',
   'scan.deeper': 'Deeper discovery',
-  'scan.deeperDescription': 'Three rounds across {count} destinations. Useful for load-balanced or changing routes; takes up to ~25 seconds.',
+  'scan.deeperDescription': 'Three spaced rounds across {count} destinations in several networks. Useful for load-balanced or changing routes; takes up to ~35 seconds. Does not force a new connection.',
   'scan.includeWebRtc': 'Include WebRTC / STUN',
   'scan.optional': 'Optional',
   'scan.webRtcDescription': 'May reveal an IP outside your VPN or proxy. Contacts Google and Cloudflare STUN servers. No camera or microphone access.',
@@ -151,8 +152,8 @@ export const en = {
   'how.subtitle': 'Not a crystal ball.',
   'how.description': 'Most IP tools show one answer. whoami asks multiple destinations and keeps the different answers together.',
   'faq.discoveryQuestion': 'How do you find more than one IP?',
-  'faq.discoveryAnswer': 'Your browser contacts this server, ipify, and icanhazip over IPv4, IPv6, and dual-stack routes. Deeper discovery repeats the checks three times. If your router distributes those requests across different public addresses, they appear separately here. Connections may be reused by the browser; repeated requests do not guarantee a new route.',
-  'faq.discoveryStatic': 'This GitHub Pages edition contacts ipify and icanhazip over IPv4, IPv6, and dual-stack routes directly from your browser. Deeper discovery repeats five checks three times. Different observed public addresses appear separately. Your browser may reuse connections, and your router chooses the route. The site itself is static and does not provide a server-side IP API.',
+  'faq.discoveryAnswer': 'Your browser contacts this server, ipify, and icanhazip over IPv4, IPv6, and dual-stack routes. Deeper discovery adds ident.me and ip4.me, using three spaced rounds against ten destinations. If your router distributes those requests across different public addresses, they appear separately here. Connections may be reused by the browser; repeated requests do not guarantee a new route.',
+  'faq.discoveryStatic': 'This GitHub Pages edition contacts ipify and icanhazip over IPv4, IPv6, and dual-stack routes directly from your browser. Deeper discovery adds ident.me and ip4.me: nine destinations, three spaced rounds. Different observed public addresses appear separately. Your browser may reuse connections, and your router chooses the route. The site itself is static and does not provide a server-side IP API.',
   'faq.linesQuestion': 'Can you detect all three of my internet lines?',
   'faq.linesAnswer': 'Not reliably from a website alone. Your operating system, VPN, and router choose the route, and browsers cannot enumerate or bind requests to all physical interfaces. IPv4 and IPv6 can belong to the same line; several lines can also share one public IP. For a complete inventory, use your router’s WAN status or a local tool with explicit interface selection.',
   'faq.linesTip': 'For a simple check, switch the active connection and scan again without reloading this tab. We keep earlier observations labeled separately. Idle failover lines will usually stay invisible until activated.',
@@ -253,7 +254,7 @@ export const de: Record<TranslationKey, Message> = {
   'scan.again': 'Erneut scannen',
   'scan.options': 'Scan-Optionen',
   'scan.deeper': 'Vertiefte Suche',
-  'scan.deeperDescription': 'Drei Durchläufe über {count} Ziele. Hilfreich bei Lastverteilung oder wechselnden Routen; dauert bis zu etwa 25 Sekunden.',
+  'scan.deeperDescription': 'Drei zeitlich verteilte Runden über {count} Ziele in mehreren Netzen. Hilfreich bei Lastverteilung oder wechselnden Routen; dauert bis zu etwa 35 Sekunden. Erzwingt keine neue Verbindung.',
   'scan.includeWebRtc': 'WebRTC / STUN einbeziehen',
   'scan.optional': 'Optional',
   'scan.webRtcDescription': 'Kann eine IP außerhalb deines VPNs oder Proxys sichtbar machen. Kontaktiert STUN-Server von Google und Cloudflare. Kein Zugriff auf Kamera oder Mikrofon.',
@@ -335,8 +336,8 @@ export const de: Record<TranslationKey, Message> = {
   'how.subtitle': 'Keine Kristallkugel.',
   'how.description': 'Die meisten IP-Werkzeuge zeigen eine Antwort. whoami fragt mehrere Ziele und hält die unterschiedlichen Antworten zusammen.',
   'faq.discoveryQuestion': 'Wie findet ihr mehr als eine IP?',
-  'faq.discoveryAnswer': 'Dein Browser kontaktiert diesen Server, ipify und icanhazip über IPv4-, IPv6- und Dual-Stack-Routen. Die vertiefte Suche wiederholt die Prüfungen dreimal. Wenn dein Router diese Anfragen auf verschiedene öffentliche Adressen verteilt, erscheinen sie hier einzeln. Der Browser kann Verbindungen wiederverwenden; wiederholte Anfragen garantieren keine neue Route.',
-  'faq.discoveryStatic': 'Diese GitHub-Pages-Version kontaktiert ipify und icanhazip über IPv4-, IPv6- und Dual-Stack-Routen direkt aus deinem Browser. Die vertiefte Suche wiederholt fünf Checks dreimal. Unterschiedliche öffentliche Adressen erscheinen einzeln. Dein Browser kann Verbindungen wiederverwenden; dein Router entscheidet über die Route. Die Website ist statisch und bietet selbst keine serverseitige IP-API.',
+  'faq.discoveryAnswer': 'Dein Browser kontaktiert diesen Server, ipify und icanhazip über IPv4-, IPv6- und Dual-Stack-Routen. Die vertiefte Suche ergänzt ident.me und ip4.me: drei zeitlich verteilte Runden über zehn Ziele. Wenn dein Router diese Anfragen auf verschiedene öffentliche Adressen verteilt, erscheinen sie hier einzeln. Der Browser kann Verbindungen wiederverwenden; wiederholte Anfragen garantieren keine neue Route.',
+  'faq.discoveryStatic': 'Diese GitHub-Pages-Version kontaktiert ipify und icanhazip über IPv4-, IPv6- und Dual-Stack-Routen direkt aus deinem Browser. Die vertiefte Suche ergänzt ident.me und ip4.me: neun Ziele, drei zeitlich verteilte Runden. Unterschiedliche öffentliche Adressen erscheinen einzeln. Dein Browser kann Verbindungen wiederverwenden; dein Router entscheidet über die Route. Die Website ist statisch und bietet selbst keine serverseitige IP-API.',
   'faq.linesQuestion': 'Könnt ihr alle drei meiner Internetleitungen erkennen?',
   'faq.linesAnswer': 'Nicht zuverlässig allein über eine Website. Dein Betriebssystem, VPN und Router wählen die Route. Browser können nicht alle physischen Schnittstellen auflisten oder Anfragen an sie binden. IPv4 und IPv6 können zur selben Leitung gehören; mehrere Leitungen können sich auch eine öffentliche IP teilen. Für einen vollständigen Überblick nutze den WAN-Status deines Routers oder ein lokales Werkzeug mit gezielter Schnittstellenauswahl.',
   'faq.linesTip': 'Für einen einfachen Test wechsle die aktive Verbindung und scanne erneut, ohne diesen Tab neu zu laden. Frühere Beobachtungen bleiben gesondert gekennzeichnet. Inaktive Ersatzleitungen bleiben normalerweise unsichtbar, bis sie aktiviert werden.',
@@ -437,11 +438,13 @@ export function createI18n(language: Language) {
     formatDate(value, { hour: '2-digit', minute: '2-digit', second: '2-digit', ...options })
   const formatDateTime = (value: DateInput, options?: Intl.DateTimeFormatOptions) =>
     formatDate(value, { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', ...options })
-  const formatSource = (source: string) => source === 'This server' ? t('source.server')
+  const formatSource = (source: string) => source === 'WebRTC · Device candidate' ? reliabilityText(language, 'candidateSource')
+    : source === 'This server' ? t('source.server')
     : source === 'Dual stack' ? t('source.dualStack')
       : source.endsWith(' · Dual stack') ? `${source.slice(0, -'Dual stack'.length)}${t('source.dualStack')}` : source
   const formatDiagnostic = (message?: string): string => {
     if (!message) return ''
+    if (message === 'Rate limited earlier in this scan. Further requests to this destination were skipped.') return reliabilityText(language, 'rateLimitedLocalized')
     const key = diagnosticMap.get(message)
     if (key) return t(key)
     const http = /^HTTP (\d{3})$/.exec(message)

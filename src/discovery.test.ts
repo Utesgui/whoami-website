@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  discover, discoverWebRtc, ENDPOINTS, lookupIp, mergeObservation,
-  parsePublicIp, pause, probeEndpoint, type ProbeResult,
+  DEEP_ENDPOINTS, DEVICE_CANDIDATE_SOURCE, discover, discoverWebRtc, ENDPOINTS, hasRemoteEvidence, lookupIp, mergeObservation,
+  parseIceCandidate, parsePublicIp, pause, probeEndpoint, STUN_TARGETS, type ProbeResult,
 } from './discovery'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
@@ -41,9 +41,27 @@ describe('observation history', () => {
     const later = mergeObservation(original, { ...result, ip: '1.1.1.1' }, 2)
     expect(later.map((a) => a.scanId)).toEqual([1, 2])
   })
+  it('does not turn a device candidate into a new remote observation', () => {
+    const candidate = { ...result, source: DEVICE_CANDIDATE_SOURCE, ip: '2606:4700:4700::1111', family: 'IPv6' as const }
+    let addresses = mergeObservation([], candidate, 1)
+    expect(hasRemoteEvidence(addresses[0])).toBe(false)
+    expect(addresses[0].scanId).toBe(-1)
+    addresses = mergeObservation(addresses, { ...candidate, source: 'ipify · IPv6' }, 2)
+    expect(hasRemoteEvidence(addresses[0])).toBe(true)
+    expect(addresses[0].scanId).toBe(2)
+    addresses = mergeObservation(addresses, candidate, 3)
+    expect(addresses[0].scanId).toBe(2)
+  })
 })
 
 describe('HTTP probes', () => {
+  it('parses only the authoritative CSV field, not forwarded-header addresses', async () => {
+    const endpoint = DEEP_ENDPOINTS.find((entry) => entry.id === 'ip4me')!
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('IPv4,8.8.8.8,1,1.1.1.1,9.9.9.9,message'))
+    expect(await probeEndpoint(endpoint, 1, new AbortController().signal, fetcher)).toMatchObject({ ip: '8.8.8.8', family: 'IPv4' })
+    fetcher.mockResolvedValue(new Response('IPv6,8.8.8.8,1,,,'))
+    expect(await probeEndpoint(endpoint, 1, new AbortController().signal, fetcher)).toMatchObject({ status: 'failed' })
+  })
   it('uses fresh requests without credentials and validates the IP family', async () => {
     const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('{"ip":"8.8.8.8"}'))
     const response = await probeEndpoint(ENDPOINTS[1], 1, new AbortController().signal, fetcher)
@@ -106,12 +124,42 @@ describe('HTTP probes', () => {
     const controller = new AbortController()
     const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('8.8.8.8'))
     const pending = discover(controller.signal, 3, () => controller.abort(), fetcher)
+    await vi.runAllTimersAsync()
     await pending
-    expect(fetcher).toHaveBeenCalledTimes(ENDPOINTS.length)
+    expect(fetcher).toHaveBeenCalledTimes(1)
     const unused = vi.fn<typeof fetch>()
     await discover(controller.signal, 3, () => {}, unused)
     expect(unused).not.toHaveBeenCalled()
     await pause(10000, controller.signal)
+  })
+  it('stops retrying rate-limited destinations but continues the rest', async () => {
+    vi.useFakeTimers()
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async (input) => String(input).includes('api.ipify.org')
+      ? new Response('', { status: 429 }) : new Response('8.8.8.8'))
+    const results: ProbeResult[] = []
+    const pending = discover(new AbortController().signal, 3, (r) => results.push(r), fetcher, [ENDPOINTS[1], ENDPOINTS[4]])
+    await vi.runAllTimersAsync()
+    await pending
+    expect(fetcher).toHaveBeenCalledTimes(4)
+    expect(results.filter((r) => r.status === 'skipped')).toHaveLength(2)
+    expect(results.filter((r) => r.status === 'success')).toHaveLength(3)
+    expect(results[0].httpStatus).toBe(429)
+  })
+})
+
+describe('ICE public address evidence', () => {
+  it.each([
+    [{ type: 'host', address: '2606:4700:4700::1111', candidate: '' }, 'host'],
+    [{ type: 'srflx', address: '8.8.8.8', candidate: '' }, 'srflx'],
+    [{ type: null, address: null, candidate: 'candidate:1 1 udp 1 2606:4700:4700::1111 1234 typ host' }, 'host'],
+  ] as const)('accepts public candidates with explicit provenance', (candidate, kind) => {
+    expect(parseIceCandidate(candidate)?.kind).toBe(kind)
+  })
+  it.each(['192.168.1.1', '10.0.0.1', 'fe80::1', 'fd00::1', 'computer.local', '2001:db8::1'])('rejects private or obfuscated candidate %s', (address) => {
+    expect(parseIceCandidate({ type: 'host', address, candidate: '' })).toBeNull()
+  })
+  it('does not report a TURN relay address as a user connection', () => {
+    expect(parseIceCandidate({ type: 'relay', address: '8.8.8.8', candidate: '' })).toBeNull()
   })
 })
 
@@ -132,7 +180,7 @@ describe('optional lookups', () => {
     const callback = vi.fn()
     await discoverWebRtc(new AbortController().signal, callback)
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', message: 'Permission blocked' }))
-    expect(close).toHaveBeenCalledOnce()
+    expect(close).toHaveBeenCalledTimes(STUN_TARGETS.length)
   })
   it('keeps only public server-reflexive STUN candidates and closes after gathering', async () => {
     const close = vi.fn()
@@ -151,10 +199,10 @@ describe('optional lookups', () => {
     })
     const callback = vi.fn()
     await discoverWebRtc(new AbortController().signal, callback)
-    expect(callback).toHaveBeenCalledTimes(2)
+    expect(callback).toHaveBeenCalledTimes(2 * STUN_TARGETS.length)
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', ip: '8.8.8.8' }))
     expect(callback).toHaveBeenCalledWith(expect.objectContaining({ status: 'success', family: 'IPv6' }))
-    expect(close).toHaveBeenCalledOnce()
+    expect(close).toHaveBeenCalledTimes(STUN_TARGETS.length)
   })
   it('cancels STUN gathering without emitting a failure or leaving a timer', async () => {
     vi.useFakeTimers()
@@ -172,7 +220,46 @@ describe('optional lookups', () => {
     controller.abort()
     await pending
     expect(callback).not.toHaveBeenCalled()
-    expect(close).toHaveBeenCalledOnce()
+    expect(close).toHaveBeenCalledTimes(STUN_TARGETS.length)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+  it('uses fresh independent sessions across rounds and finds three IPv4 and three IPv6 candidates', async () => {
+    vi.useFakeTimers()
+    let instances = 0
+    const close = vi.fn()
+    const targets: string[] = []
+    vi.stubGlobal('RTCPeerConnection', class {
+      index = instances++
+      signalingState = 'stable'
+      onicecandidate: ((event: { candidate: { type: string; address: string; candidate: string } | null }) => void) | null = null
+      constructor(config: RTCConfiguration) {
+        expect(config.iceServers).toHaveLength(1)
+        targets.push(String(config.iceServers![0].urls))
+      }
+      createDataChannel() {}
+      async createOffer() { return {} }
+      async setLocalDescription() {
+        const line = Math.floor(this.index / STUN_TARGETS.length)
+        const ipv4 = ['8.8.8.8', '1.1.1.1', '9.9.9.9'][line]
+        const ipv6 = ['2606:4700:4700::1111', '2001:4860:4860::8888', '2620:fe::fe'][line]
+        this.onicecandidate?.({ candidate: { type: 'srflx', address: ipv4, candidate: '' } })
+        this.onicecandidate?.({ candidate: { type: 'host', address: ipv6, candidate: '' } })
+        this.onicecandidate?.({ candidate: { type: 'host', address: ipv6, candidate: '' } })
+        this.onicecandidate?.({ candidate: null })
+      }
+      close = close
+    })
+    const results: ProbeResult[] = []
+    const pending = discoverWebRtc(new AbortController().signal, (r) => results.push(r), 3)
+    await vi.runAllTimersAsync()
+    await pending
+    expect(new Set(targets).size).toBe(2)
+    expect(close).toHaveBeenCalledTimes(6)
+    const addresses = results.reduce((all, r) => mergeObservation(all, r, 1), [] as ReturnType<typeof mergeObservation>)
+    expect(addresses.filter((a) => a.family === 'IPv4')).toHaveLength(3)
+    expect(addresses.filter((a) => a.family === 'IPv6')).toHaveLength(3)
+    expect(addresses.filter(hasRemoteEvidence)).toHaveLength(3)
+    expect(results).toHaveLength(12)
     expect(vi.getTimerCount()).toBe(0)
   })
   it('rejects private lookups before sending anything and validates the returned IP', async () => {

@@ -184,7 +184,7 @@ test('API and errors carry privacy and security headers', async () => {
   assert.match(csp, /style-src 'self';/);
   assert.match(csp, /font-src 'self';/);
   assert.match(csp, /img-src 'self' data:;/);
-  for (const hostname of ['api.ipify.org', 'api6.ipify.org', 'api64.ipify.org', 'icanhazip.com', 'ipv4.icanhazip.com', 'ipv6.icanhazip.com', 'ipapi.co']) {
+  for (const hostname of ['api.ipify.org', 'api6.ipify.org', 'api64.ipify.org', 'icanhazip.com', 'ipv4.icanhazip.com', 'ipv6.icanhazip.com', 'v4.ident.me', 'v6.ident.me', 'ip4only.me', 'ip6only.me', 'ipapi.co']) {
     assert.ok(csp.includes(`https://${hostname}`));
   }
   assert.ok(!csp.includes('unsafe-inline'));
