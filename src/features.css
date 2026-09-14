@@ -35,6 +35,12 @@
 .copy-all-button { display: inline-flex; gap: 5px; align-items: center; border: 0; border-radius: 4px; color: var(--muted); background: transparent; padding: 6px 3px; font-size: 10px; white-space: nowrap; min-height: 30px; }
 .copy-all-button:hover { color: var(--blue); background: var(--blue-soft); }
 .copy-all-button:disabled { cursor: not-allowed; opacity: .5; }
+.ip-copy-line { display: inline-flex; align-items: center; gap: 7px; min-width: 0; max-width: 100%; vertical-align: middle; }
+.ip-copy-line > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.icon-button.copy-ip-button { color: var(--blue); background: var(--blue-soft); width: 30px; height: 30px; min-height: 30px; flex-shrink: 0; }
+.icon-button.copy-ip-button:hover { box-shadow: inset 0 0 0 1px var(--blue); }
+.icon-button.copy-ip-button.is-copied { color: var(--green); }
+.diagnostics-content table { min-width: 620px; }
 .list-toolbar .session-note { display: none; }
 .history-section { margin-top: 25px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); overflow: hidden; }
 .history-section > details > summary { display: flex; justify-content: space-between; align-items: center; gap: 15px; padding: 18px 21px; }

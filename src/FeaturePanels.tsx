@@ -3,6 +3,7 @@ import { ArrowDownLeft, ArrowUpRight, Check, ChevronDown, Clock3, Monitor, Moon,
 import { comparableScan, compareSnapshots, LABEL_LIMIT, type ScanSnapshot, type StorageFailure } from './history'
 import { featureText, type FeatureKey } from './featureMessages'
 import type { Theme } from './usePreferences'
+import CopyIpButton, { type CopyIp } from './CopyIpButton'
 
 type Language = 'en' | 'de'
 const storageMessage: Record<StorageFailure, FeatureKey> = {
@@ -61,11 +62,12 @@ export function SettingsPanel({ language, theme, setTheme, themeError, autoScan,
   </details>
 }
 
-export function HistoryPanel({ history, labels, hidden, language, remember }: {
+export function HistoryPanel({ history, labels, hidden, language, remember, onCopy }: {
   history: ScanSnapshot[]; labels: Record<string, string>; hidden: boolean; language: Language; remember: boolean;
+  onCopy: CopyIp;
 }) {
   const f = (key: FeatureKey, values: Record<string, string | number> = {}) => featureText(language, key, values)
-  const addressList = (ips: string[]) => <ul className="history-addresses">{ips.map((ip) => <li key={ip}><code>{hidden ? '••••••••' : ip}</code>{labels[ip] && <span className="history-name">{labels[ip]}</span>}</li>)}</ul>
+  const addressList = (ips: string[]) => <ul className="history-addresses">{ips.map((ip) => <li key={ip}><span className="ip-copy-line"><code>{hidden ? '••••••••' : ip}</code><CopyIpButton ip={ip} onCopy={onCopy} /></span>{labels[ip] && <span className="history-name">{labels[ip]}</span>}</li>)}</ul>
   return <section className="history-section" id="history">
     <details><summary><span className="history-summary"><Clock3 size={20} /><span><strong>{f('history')}<span className="count-badge">{history.length}</span></strong><small>{f(remember ? 'historySummaryLocal' : 'historySummary', { count: history.length })}</small></span></span><ChevronDown size={17} /></summary>
       <div className="history-content"><p className="history-description">{f('historyDescription')}</p>{!history.length ? <p className="history-empty">{f('historyEmpty')}</p> : <ol className="history-list">{history.map((entry, index) => {

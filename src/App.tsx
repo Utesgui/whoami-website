@@ -19,6 +19,7 @@ import { SERVER_API_ENABLED } from './hosting'
 import CoveragePanel from './CoveragePanel'
 import { getCoverage, type ExpectedCounts } from './coverage'
 import { reliabilityText, type ReliabilityKey } from './reliabilityMessages'
+import CopyIpButton, { type CopyIp } from './CopyIpButton'
 
 const masked = (family: string) => family === 'IPv4' ? '•••.•••.•••.•••' : '••••:••••:••••::••••'
 type ConnectionInfo = { effectiveType?: string; downlink?: number; rtt?: number; saveData?: boolean; addEventListener?: (type: string, listener: () => void) => void; removeEventListener?: (type: string, listener: () => void) => void }
@@ -74,7 +75,7 @@ function RouteDiagram({ addresses, running }: { addresses: Address[]; running: b
 }
 
 function AddressRow({ address, index, current, hidden, demo, onCopy, name, onName }: {
-  address: Address; index: number; current: boolean; hidden: boolean; demo: boolean; onCopy: (text: string) => void;
+  address: Address; index: number; current: boolean; hidden: boolean; demo: boolean; onCopy: CopyIp;
   name: string; onName: (ip: string, name: string) => boolean;
 }) {
   const { language, t, formatTime, formatNumber, formatSource, formatDiagnostic } = useI18n()
@@ -105,11 +106,10 @@ function AddressRow({ address, index, current, hidden, demo, onCopy, name, onNam
       <span className={`address-icon ${address.family === 'IPv6' ? 'ipv6-icon' : ''}`}><Globe2 size={21} /></span>
       <div className="address-main">
         <div className="address-label"><span className={name ? 'custom-name' : ''}>{name || t('address.label', { index: formatNumber(index + 1, { minimumIntegerDigits: 2 }) })}</span><span className={`family-tag ${address.family === 'IPv6' ? 'v6' : ''}`}>{address.family}</span>{candidateOnly ? <span className="earlier-tag">{reliabilityText(language, 'candidateBadge')}</span> : !current && <span className="earlier-tag">{t('address.earlier')}</span>}</div>
-        <span className="address-value">{hidden ? masked(address.family) : address.ip}</span>
+        <span className="ip-copy-line"><span className="address-value">{hidden ? masked(address.family) : address.ip}</span><CopyIpButton ip={address.ip} onCopy={onCopy} label={t('address.copyNumber', { index: index + 1 })} /></span>
         <span className="address-sources">{address.sources.map(formatSource).join(' · ')}</span>
       </div>
       <div className="address-confirmation"><span><span className={`tiny-dot ${current && !candidateOnly ? 'green' : 'gray'}`} />{candidateOnly ? reliabilityText(language, 'candidateBadge') : t(current ? 'common.observed' : 'address.previouslySeen')}</span><small>{t('address.observations', { count: address.observations })}</small></div>
-      <button className="icon-button" onClick={() => onCopy(address.ip)} aria-label={t('address.copyNumber', { index: index + 1 })} title={t('address.copy')}><Copy size={17} /></button>
       <button className="icon-button expand-button" onClick={() => setOpen(!open)} aria-label={t(open ? 'address.hideDetails' : 'address.showDetails', { index: index + 1 })} aria-expanded={open} aria-controls={`address-details-${index}`}><ChevronDown size={18} /></button>
     </div>
     {open && <div className="address-details" id={`address-details-${index}`}>
@@ -242,8 +242,9 @@ export default function App() {
       await navigator.clipboard.writeText(text)
       if (all) { setToast(''); setFeatureToast('copiedAll') }
       else setToast('toast.copied')
+      return true
     }
-    catch { setToast('toast.clipboardUnavailable') }
+    catch { setToast('toast.clipboardUnavailable'); return false }
   }
   const clearData = () => {
     if (!notebook.clearData()) return false
@@ -311,7 +312,7 @@ export default function App() {
         <div className="workbench-main">
           <div className="primary-address">
             <div className="primary-label"><h2 id="primary-heading">{primary ? t('connection.observedPublic', { family: primary.family }) : t('connection.publicIp')}</h2><button className="icon-button hide-button" aria-label={t(hidden ? 'connection.showIps' : 'connection.hideIps')} title={t(hidden ? 'connection.showIps' : 'connection.hideIps')} onClick={() => setHidden(!hidden)}>{hidden ? <EyeOff size={17} /> : <Eye size={17} />}</button></div>
-            <div className={`primary-ip ${primary?.family === 'IPv6' ? 'primary-v6' : ''} ${!primary ? 'ip-placeholder' : ''}`}>{primary ? hidden ? masked(primary.family) : primary.ip : t(running ? 'connection.lookingUp' : 'connection.notYetObserved')}{primary && <button className="icon-button primary-copy" onClick={() => void copy(primary.ip)} aria-label={t('connection.copyPrimary')}><Copy size={21} /></button>}</div>
+            <div className={`primary-ip ${primary?.family === 'IPv6' ? 'primary-v6' : ''} ${!primary ? 'ip-placeholder' : ''}`}>{primary ? hidden ? masked(primary.family) : primary.ip : t(running ? 'connection.lookingUp' : 'connection.notYetObserved')}{primary && <CopyIpButton ip={primary.ip} onCopy={copy} label={t('connection.copyPrimary')} className="primary-copy" />}</div>
             <p className="primary-caption">{primary ? <><span className="tiny-dot green" />{t(demo ? 'demo.address' : 'connection.seenThisScan')}<span className="caption-divider" />{r('gathered', { count: primary.sources.length })}</> : t(running ? 'connection.checkingDestinations' : 'connection.tryAgain')}</p>
             {primary && labels[primary.ip] && <p className="named-primary"><Tag size={13} /><span>{f('assignedName')}: {labels[primary.ip]}</span></p>}
             <div className="scan-actions"><button className="button primary" onClick={() => running ? stopScan() : void startScan(demo)}>{running ? <Square size={15} /> : <ScanLine size={18} />}{t(running ? 'scan.stop' : demo ? 'scan.checkConnection' : 'scan.again')}</button><button className={`button quiet options-button ${optionsOpen ? 'selected' : ''}`} onClick={() => setOptionsOpen(!optionsOpen)} aria-expanded={optionsOpen} aria-controls="scan-options"><SlidersHorizontal size={16} />{t('scan.options')}<ChevronDown size={14} /></button></div>
@@ -338,7 +339,7 @@ export default function App() {
           <div className="section-heading"><div><h2 id="addresses-heading">{t('addresses.heading')} <span className="count-badge">{formatNumber(addresses.length)}</span></h2><p>{t('addresses.description')}</p></div><button className="icon-button" aria-label={t('addresses.about')} onClick={() => document.getElementById('how-it-works')?.scrollIntoView({ behavior: 'smooth' })}><CircleHelp size={18} /></button></div>
           <div className="address-panel">
             <div className="list-toolbar"><div className="filter-tabs" role="group" aria-label={t('addresses.filter')}>{(['all', 'IPv4', 'IPv6'] as const).map((item) => <button aria-pressed={filter === item} className={filter === item ? 'selected' : ''} key={item} onClick={() => setFilter(item)}>{item === 'all' ? t('addresses.all') : item}<span>{formatNumber(item === 'all' ? addresses.length : item === 'IPv4' ? v4Count : v6Count)}</span></button>)}</div><button className="copy-all-button" disabled={!addresses.length} onClick={() => void copy(addresses.map((address) => address.ip).join('\n'), true)}><Copy size={13} />{f('copyAll')}</button></div>
-            {visibleAddresses.length ? visibleAddresses.map((address, index) => <AddressRow key={`${demo}-${address.ip}`} address={address} index={index} current={address.scanId === scanId} hidden={hidden} demo={demo} name={labels[address.ip] ?? ''} onName={notebook.nameAddress} onCopy={(ip) => void copy(ip)} />) : <div className="empty-state"><Network size={29} /><h3>{running ? t('addresses.finding') : filter === 'all' ? t('addresses.empty') : t('addresses.emptyFamily', { family: filter })}</h3><p>{t(running ? 'addresses.loadingHint' : 'addresses.emptyHint')}</p>{!running && <button className="text-button" onClick={() => void startScan(demo)}>{t('addresses.tryAgain')} <ArrowRight size={15} /></button>}</div>}
+            {visibleAddresses.length ? visibleAddresses.map((address, index) => <AddressRow key={`${demo}-${address.ip}`} address={address} index={index} current={address.scanId === scanId} hidden={hidden} demo={demo} name={labels[address.ip] ?? ''} onName={notebook.nameAddress} onCopy={copy} />) : <div className="empty-state"><Network size={29} /><h3>{running ? t('addresses.finding') : filter === 'all' ? t('addresses.empty') : t('addresses.emptyFamily', { family: filter })}</h3><p>{t(running ? 'addresses.loadingHint' : 'addresses.emptyHint')}</p>{!running && <button className="text-button" onClick={() => void startScan(demo)}>{t('addresses.tryAgain')} <ArrowRight size={15} /></button>}</div>}
             <div className="list-footnote"><ShieldCheck size={14} /><span>{f(demo ? 'demoFootnote' : notebook.remember ? 'savedFootnote' : 'tabFootnote')}</span></div>
           </div>
           <div className="multi-note"><span className="multi-note-icon"><Network size={21} /></span><div><strong>{t('addresses.multiTitle')}</strong><p>{t('addresses.multiDescription')}</p><a href="#how-it-works">{t('addresses.multiLink')} <ArrowRight size={14} /></a></div></div>
@@ -359,12 +360,12 @@ export default function App() {
         </aside>
       </div>
 
-      <HistoryPanel history={history} labels={labels} hidden={hidden} language={language} remember={notebook.remember && !demo} />
+      <HistoryPanel history={history} labels={labels} hidden={hidden} language={language} remember={notebook.remember && !demo} onCopy={copy} />
 
       <section className="diagnostics-section" id="diagnostics">
         <details>
           <summary><span className="diagnostics-title"><span className="diagnostics-icon"><CheckCheck size={20} /></span><span><strong>{t('diagnostics.heading')}</strong><small>{results.length ? `${t('diagnostics.successes', { count: successes.length })}${unavailable ? ` · ${t('diagnostics.unavailable', { count: unavailable })}` : ''}` : t('diagnostics.subtitle')}</small></span></span><span className="diagnostics-action">{t('diagnostics.view')} <ChevronDown size={17} /></span></summary>
-          <div className="diagnostics-content"><p>{t('diagnostics.explanation')}</p><p>{r('hostHistory')}</p>{results.length ? <div className="table-scroll"><table><thead><tr><th>{t('diagnostics.destination')}</th><th>{t('diagnostics.round')}</th><th>{t('diagnostics.result')}</th><th>{t('diagnostics.time')}</th></tr></thead><tbody>{results.map((result, index) => <tr key={`${result.id}-${index}`}><td>{formatSource(result.source)}</td><td>{formatNumber(result.round)}</td><td><span className={`result-status ${result.source === DEVICE_CANDIDATE_SOURCE ? 'skipped' : result.status}`}>{result.status === 'success' ? hidden ? masked(result.family ?? 'IPv4') : result.ip : t(result.status === 'skipped' ? 'common.notExposed' : 'common.unavailable')}</span>{result.source === DEVICE_CANDIDATE_SOURCE && <small>{r('candidateCaption')}</small>}{result.message && <small>{formatDiagnostic(result.message)}</small>}</td><td>{t('diagnostics.duration', { duration: result.duration })}</td></tr>)}</tbody></table></div> : <p>{t('diagnostics.empty')}</p>}</div>
+          <div className="diagnostics-content"><p>{t('diagnostics.explanation')}</p><p>{r('hostHistory')}</p>{results.length ? <div className="table-scroll"><table><thead><tr><th>{t('diagnostics.destination')}</th><th>{t('diagnostics.round')}</th><th>{t('diagnostics.result')}</th><th>{t('diagnostics.time')}</th></tr></thead><tbody>{results.map((result, index) => <tr key={`${result.id}-${index}`}><td>{formatSource(result.source)}</td><td>{formatNumber(result.round)}</td><td><span className="ip-copy-line"><span className={`result-status ${result.source === DEVICE_CANDIDATE_SOURCE ? 'skipped' : result.status}`}>{result.status === 'success' ? hidden ? masked(result.family ?? 'IPv4') : result.ip : t(result.status === 'skipped' ? 'common.notExposed' : 'common.unavailable')}</span>{result.status === 'success' && result.ip && <CopyIpButton ip={result.ip} onCopy={copy} />}</span>{result.source === DEVICE_CANDIDATE_SOURCE && <small>{r('candidateCaption')}</small>}{result.message && <small>{formatDiagnostic(result.message)}</small>}</td><td>{t('diagnostics.duration', { duration: result.duration })}</td></tr>)}</tbody></table></div> : <p>{t('diagnostics.empty')}</p>}</div>
         </details>
       </section>
 

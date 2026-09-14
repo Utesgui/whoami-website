@@ -46,7 +46,7 @@ GitHub Pages cannot run Node.js, so this edition checks **five public destinatio
 
 ## Names, history, and monitoring
 
-Expand an address to give it a **manual name** of up to 40 characters. A name is your annotation, not proof that the IP belongs to a particular physical line. All observed addresses can be copied in one click. Reports include annotations and scan snapshots.
+Expand an address to give it a **manual name** of up to 40 characters. A name is your annotation, not proof that the IP belongs to a particular physical line. Every displayed IP has an adjacent copy icon, including in diagnostics and history; a temporary checkmark confirms success, and clipboard failures are reported. Copying uses the actual address even when display masking is on. All observed addresses can also be copied in one click. Reports include annotations and scan snapshots.
 
 **Scan history** retains the latest 30 scans and compares observed addresses against the preceding scan with results. New addresses and addresses not seen again are distinguished. Stopped scans and scans with no public observations do not produce misleading outage comparisons. Partial service failures, VPN changes, and different probe destinations can explain differences; this is not a line-outage detector. Up to 100 recent addresses are retained.
 
