@@ -15,6 +15,7 @@ import { useNotebook } from './useNotebook'
 import { useAutoScan, useTheme } from './usePreferences'
 import { featureText, type FeatureKey } from './featureMessages'
 import { HistoryPanel, NameEditor, SettingsPanel, storageErrorText } from './FeaturePanels'
+import { SERVER_API_ENABLED } from './hosting'
 
 const masked = (family: string) => family === 'IPv4' ? '•••.•••.•••.•••' : '••••:••••:••••::••••'
 type ConnectionInfo = { effectiveType?: string; downlink?: number; rtt?: number; saveData?: boolean; addEventListener?: (type: string, listener: () => void) => void; removeEventListener?: (type: string, listener: () => void) => void }
@@ -307,7 +308,7 @@ export default function App() {
           <RouteDiagram addresses={current} running={running} />
         </div>
         {optionsOpen && <div className="scan-options" id="scan-options">
-          <label className="option"><input type="checkbox" checked={deepScan} onChange={(event) => setDeepScan(event.target.checked)} disabled={running} /><span><strong>{t('scan.deeper')}</strong><small>{t('scan.deeperDescription')}</small></span></label>
+          <label className="option"><input type="checkbox" checked={deepScan} onChange={(event) => setDeepScan(event.target.checked)} disabled={running} /><span><strong>{t('scan.deeper')}</strong><small>{t('scan.deeperDescription', { count: ENDPOINTS.length })}</small></span></label>
           <label className="option"><input type="checkbox" checked={webRtc} onChange={(event) => setWebRtc(event.target.checked)} disabled={running} /><span><strong>{t('scan.includeWebRtc')} <span className="optional-tag">{t('scan.optional')}</span></strong><small>{t('scan.webRtcDescription')}</small></span></label>
           <p>{t('scan.optionsHint')}</p>
         </div>}
@@ -357,14 +358,14 @@ export default function App() {
       <section className="how-section" id="how-it-works">
         <div className="how-heading"><h2>{t('how.title')}<br /><span>{t('how.subtitle')}</span></h2><p>{t('how.description')}</p></div>
         <div className="how-content">
-          <details><summary>{t('faq.discoveryQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.discoveryAnswer')}</p></details>
+          <details><summary>{t('faq.discoveryQuestion')}<ChevronDown size={18} /></summary><p>{t(SERVER_API_ENABLED ? 'faq.discoveryAnswer' : 'faq.discoveryStatic')}</p></details>
           <details><summary>{t('faq.linesQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.linesAnswer')}</p><p>{t('faq.linesTip')}</p></details>
           <details><summary>{t('faq.detailsQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.detailsAnswer')}</p></details>
           <details id="privacy"><summary>{t('faq.privacyQuestion')}<ChevronDown size={18} /></summary><p>{t('faq.privacyAnswer')}</p><p>{t('faq.privacyDetails')}</p><p>{f('privacyLocal')}</p></details>
         </div>
       </section>
     </main>
-    <footer><a className="brand footer-brand" href="#main">whoami<span className="brand-period">.</span></a><span>{t('footer.tagline')}</span><div><a href="/api/whoami" target="_blank" rel="noreferrer">{t('footer.api')} <ArrowUpRight size={13} /></a><button onClick={() => demo ? void startScan(true) : showDemo()}>{t(demo ? 'demo.backToLive' : 'demo.explore')}<ArrowRight size={13} /></button></div></footer>
+    <footer><a className="brand footer-brand" href="#main">whoami<span className="brand-period">.</span></a><span>{t('footer.tagline')}</span><div>{SERVER_API_ENABLED && <a href="/api/whoami" target="_blank" rel="noreferrer">{t('footer.api')} <ArrowUpRight size={13} /></a>}<button onClick={() => demo ? void startScan(true) : showDemo()}>{t(demo ? 'demo.backToLive' : 'demo.explore')}<ArrowRight size={13} /></button></div></footer>
     {(toast || featureToast) && <div className="toast" role="status"><Info size={17} /><span>{featureToast ? f(featureToast) : toast ? t(toast) : ''}</span><button className="icon-button" aria-label={t('common.dismiss')} onClick={() => { setToast(''); setFeatureToast(null) }}><X size={16} /></button></div>}
   </>
 }

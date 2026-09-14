@@ -1,4 +1,5 @@
 import ipaddr from 'ipaddr.js'
+import { SERVER_API_ENABLED } from './hosting'
 
 export type Family = 'IPv4' | 'IPv6'
 export type Endpoint = { id: string; name: string; url: string; format: 'json' | 'text'; family?: Family }
@@ -24,7 +25,7 @@ export type Address = {
 }
 
 export const ENDPOINTS: Endpoint[] = [
-  { id: 'origin', name: 'This server', url: '/api/whoami', format: 'json' },
+  ...(SERVER_API_ENABLED ? [{ id: 'origin', name: 'This server', url: '/api/whoami', format: 'json' as const }] : []),
   { id: 'ipify4', name: 'ipify · IPv4', url: 'https://api.ipify.org?format=json', format: 'json', family: 'IPv4' },
   { id: 'ipify6', name: 'ipify · IPv6', url: 'https://api6.ipify.org?format=json', format: 'json', family: 'IPv6' },
   { id: 'ipify64', name: 'ipify · Dual stack', url: 'https://api64.ipify.org?format=json', format: 'json' },

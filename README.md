@@ -14,12 +14,28 @@ npm start
 
 Open **http://127.0.0.1:3001**. For development, keep `npm start` running for the API and run `npm run dev` in another terminal; Vite proxies `/api` to port 3001.
 
-The interface also works on static hosting: the same-origin API check will be unavailable, while the public services are still checked. No API keys are required. `?demo=1` opens a clearly labeled, offline example using documentation-only IP addresses; it never contacts external IP services until you switch to live.
+The interface also works on static hosting. The dedicated Pages build omits the same-origin API check and API link, while public services are still checked directly from the browser. No API keys are required. `?demo=1` opens a clearly labeled, offline example using documentation-only IP addresses; it never contacts external IP services until you switch to live.
+
+## GitHub Pages production
+
+**Website:** https://utesgui.github.io/whoami-website/
+
+Pushes to `main` run `.github/workflows/deploy-pages.yml`: unit/server tests, static build, desktop/mobile Pages smoke tests, then deployment. The repository's Pages source must be **GitHub Actions**. The deployment requires no server, API keys, or third-party hosting account.
+
+```sh
+npm run build:pages
+npm run test:pages
+npm run preview:pages
+```
+
+The Pages build uses `/whoami-website/` as its asset base. To use another repository name, pass `-- --base=/your-repository/` to `build:pages` and adapt the Pages preview/test base paths. The workflow derives the deployed asset prefix from the repository name.
+
+GitHub Pages cannot run Node.js, so this edition checks **five public destinations** (15 checks in a deeper scan) and has no `/api/whoami` endpoint. IPv4/IPv6 discovery, optional WebRTC, location lookups, names, history, themes, translations, and export still work. The ordinary `npm run build` / `npm start` deployment retains the server API and sixth destination. GitHub Pages itself can log normal website request metadata under GitHub's privacy policies.
 
 ## What it can discover
 
 - IPv4 and IPv6 addresses observed by this server, ipify, and icanhazip, including distinct addresses exposed to different destinations.
-- Deeper discovery: three rounds against six HTTP destinations, with cache-busting, timeouts, independent failures, and cancellation.
+- Deeper discovery: three rounds against five public HTTP destinations, plus the site's IP API when running with a backend, with cache-busting, timeouts, independent failures, and cancellation.
 - Optional WebRTC/STUN discovery of public server-reflexive candidates. **Off by default**: it can expose an IP outside a VPN or proxy. It contacts Google and Cloudflare STUN servers without camera or microphone permission.
 - Per-address source evidence, first/last-seen times, and optional provider, ASN, and approximate location from ipapi.co.
 - Browser-reported online status, secure context, language, timezone, and effective connection estimate when supported.
