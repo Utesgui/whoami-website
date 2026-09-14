@@ -1,0 +1,30 @@
+[data-theme="dark"] :is(.site-header, .connection-workbench, .address-panel, .diagnostics-section, .button.secondary, .diagram-caption, .browser-node > div, .browser-node strong, .browser-node > span, .path-node, .path-dot, .more-paths) {
+  background: var(--surface);
+}
+[data-theme="dark"] :is(.workbench-summary, .list-footnote) { background: var(--surface-muted); }
+[data-theme="dark"] :is(.button.primary, .brand-mark) { background: #315bd6; color: white; }
+[data-theme="dark"] .button.primary:hover { background: #416cec; }
+[data-theme="dark"] .button.secondary { border-color: var(--line); }
+[data-theme="dark"] .button.secondary:hover { border-color: var(--blue); background: var(--blue-soft); }
+[data-theme="dark"] :is(.address-entry + .address-entry, td, .route-diagram) { border-color: var(--line); }
+[data-theme="dark"] :is(.online-indicator, .privacy-note > span, .result-status.success) { color: var(--green); }
+[data-theme="dark"] :is(.online-indicator.offline, .optional-tag, .result-status.failed) { color: var(--warning); }
+[data-theme="dark"] :is(.section-label svg, .primary-copy, .ip-placeholder, .diagram-caption, .diagram-caption > span:last-child, .path-node strong, .path-node > div > span, .family-mini, .workbench-summary .checked-time, .environment-list dt svg, .diagnostics-icon, .how-content summary svg) { color: var(--muted); }
+[data-theme="dark"] :is(.count-badge, .address-icon, .family-tag) { background: var(--blue-soft); color: #b7caff; }
+[data-theme="dark"] .filter-tabs button:hover { background: var(--blue-soft); }
+[data-theme="dark"] :is(.ipv6-icon, .family-tag.v6) { background: #1b3836; color: #91d9c9; }
+[data-theme="dark"] .earlier-tag { background: #3c3323; color: #edc887; }
+[data-theme="dark"] .inline-error { color: var(--danger); }
+[data-theme="dark"] .multi-note { background: #1d2e4b; }
+[data-theme="dark"] :is(.multi-note-icon, .multi-note strong, .multi-note p, .multi-note a) { color: #c0d2f3; }
+[data-theme="dark"] .how-heading h2 > span { color: #a0aec4; }
+[data-theme="dark"] .demo-banner { background: #203252; color: #c0d2f3; border-color: #354e7b; }
+[data-theme="dark"] .offline-banner { background: #342d20; color: #edc887; border-color: #63513a; }
+[data-theme="dark"] .route-diagram { background-image: radial-gradient(#435371 .65px, transparent .65px); }
+[data-theme="dark"] .route-lines path { stroke: #6482bd; }
+[data-theme="dark"] .route-lines circle { fill: #9cb6ff; stroke: var(--surface); }
+[data-theme="dark"] :is(.browser-node > div, .path-dot, .family-mini) { border-color: #536887; }
+[data-theme="dark"] .observed .path-dot { background: var(--blue-soft); border-color: #7b9bdd; color: #c4d3ff; }
+[data-theme="dark"] .observed strong { color: var(--ink); }
+[data-theme="dark"] .skip-link { background: var(--blue); color: #101724; }
+[data-theme="dark"] ::selection { background: #3c5483; color: white; }
